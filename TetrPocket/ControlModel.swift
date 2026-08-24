@@ -161,6 +161,7 @@ final class LayoutStore: ObservableObject {
     @Published private(set) var slot: LayoutSlot
     @Published private(set) var adBlockEnabled: Bool
     @Published private(set) var hapticsEnabled: Bool
+    @Published private(set) var boardZoom: Double
 
     /// Every slot's arrangement, keyed by `LayoutSlot.rawValue`.
     private var stored: [String: [ControlButton]]
@@ -168,10 +169,17 @@ final class LayoutStore: ObservableObject {
     private static let layoutsKey = "tetrport.layouts.v3"
     private static let adBlockKey = "tetrport.adblock.enabled"
     private static let hapticsKey = "tetrport.haptics.enabled"
+    private static let zoomKey = "tetrport.board.zoom"
+
+    static let zoomRange: ClosedRange<Double> = 0.8...2.0
+    static let defaultZoom: Double = 1.15
 
     init() {
         let defaults = UserDefaults.standard
         adBlockEnabled = defaults.object(forKey: Self.adBlockKey) as? Bool ?? true
+
+        let savedZoom = defaults.object(forKey: Self.zoomKey) as? Double ?? Self.defaultZoom
+        boardZoom = min(max(savedZoom, Self.zoomRange.lowerBound), Self.zoomRange.upperBound)
 
         // iPads have no haptic engine, so the feedback is dead weight there.
         let isPad = UIDevice.current.userInterfaceIdiom == .pad
@@ -220,6 +228,17 @@ final class LayoutStore: ObservableObject {
     func setHaptics(_ enabled: Bool) {
         hapticsEnabled = enabled
         UserDefaults.standard.set(enabled, forKey: Self.hapticsKey)
+    }
+
+    /// Zooming in also *reduces* the number of CSS pixels the game lays out
+    /// across, so the canvas renders fewer physical pixels — it makes the board
+    /// bigger and the frame cheaper at the same time.
+    func setZoom(_ zoom: Double) {
+        boardZoom = min(max(zoom, Self.zoomRange.lowerBound), Self.zoomRange.upperBound)
+    }
+
+    func commitZoom() {
+        UserDefaults.standard.set(boardZoom, forKey: Self.zoomKey)
     }
 
     /// Reset only the arrangement currently on screen.

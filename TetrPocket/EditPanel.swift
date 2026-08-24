@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Shown while arranging controls: pick a button, then size and fade it.
+/// Settings sheet, shown while arranging controls: board zoom, then per-button
+/// size and fade for whichever button is selected.
 struct EditPanel: View {
     @ObservedObject var store: LayoutStore
 
@@ -16,6 +17,29 @@ struct EditPanel: View {
                     .foregroundColor(.white.opacity(0.4))
                     .tracking(1.0)
 
+                // --- board zoom (applies live) ---
+                Text("BOARD ZOOM")
+                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+                    .foregroundColor(.cyan)
+                    .tracking(1.2)
+
+                SliderRow(icon: "plus.magnifyingglass",
+                          value: store.boardZoom * 100,
+                          range: (LayoutStore.zoomRange.lowerBound * 100)...(LayoutStore.zoomRange.upperBound * 100),
+                          unit: "%") { newValue in
+                    store.setZoom(newValue / 100)
+                } onCommit: {
+                    store.commitZoom()
+                }
+
+                Text("Bigger board also renders fewer pixels, so this can help frame rate.")
+                    .font(.system(size: 10, design: .rounded))
+                    .foregroundColor(.white.opacity(0.45))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Divider().overlay(Color.white.opacity(0.15))
+
+                // --- selected button ---
                 if let button = store.selectedButton {
                     Text(button.key.title.uppercased())
                         .font(.system(size: 11, weight: .heavy, design: .rounded))
@@ -77,10 +101,10 @@ struct EditPanel: View {
             }
             .foregroundColor(.white)
             .padding(14)
-            .frame(width: 290)
+            .frame(width: 300)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.black.opacity(0.82))
+                    .fill(Color.black.opacity(0.85))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)

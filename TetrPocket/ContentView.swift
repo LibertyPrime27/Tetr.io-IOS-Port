@@ -14,7 +14,9 @@ struct ContentView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            GameWebView(proxy: proxy, adBlockEnabled: store.adBlockEnabled)
+            GameWebView(proxy: proxy,
+                        adBlockEnabled: store.adBlockEnabled,
+                        zoom: store.boardZoom)
                 .ignoresSafeArea()
 
             // Watches the screen shape so each device/orientation gets its own
@@ -56,6 +58,13 @@ struct ContentView: View {
         }
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
+        }
+        // Coming back from the background can leave the session deactivated and
+        // contexts suspended, so re-assert both.
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIApplication.didBecomeActiveNotification)) { _ in
+            AudioSession.reactivate()
+            proxy.unlockAudio()
         }
         // A hardware keyboard talks to the page directly, so the overlay is just
         // in the way — tuck it away the first time one shows up. The controller
