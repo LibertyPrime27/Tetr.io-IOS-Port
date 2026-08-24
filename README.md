@@ -3,9 +3,15 @@
 A personal iOS wrapper for [TETR.IO](https://tetr.io) — the real game, running fullscreen
 in a native app with touch controls, since TETR.IO has no official mobile version.
 
-> **Personal use only.** TETR.IO and all its content belong to [osk](https://osk.sh).
-> This repo is private and its builds are never distributed. It adds no gameplay
-> advantage — the touch overlay just presses the game's normal keys.
+> **Unofficial and unaffiliated.** Not affiliated with, authorized, or endorsed by
+> [osk](https://osk.sh), TETR.IO, or The Tetris Company. TETR.IO and all its content
+> belong to their respective owners.
+>
+> This repository contains **no game code or assets** — it is just a WebView shell that
+> loads `tetr.io` in the browser engine, so you play the live official game with your own
+> account, subject to TETR.IO's own terms of service. The touch overlay presses the game's
+> normal keys and confers no gameplay advantage. Builds here are **unsigned**: you sign
+> them yourself with your own Apple ID. Use at your own risk.
 
 ## How it works
 
