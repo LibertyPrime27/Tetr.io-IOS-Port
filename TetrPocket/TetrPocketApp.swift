@@ -5,12 +5,8 @@ struct TetrPocketApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .preferredColorScheme(.dark)
                 .ignoresSafeArea()
-                .persistentSystemOverlays(.hidden)
-                .onAppear {
-                    // Keep the screen awake during play
-                    UIApplication.shared.isIdleTimerDisabled = true
-                }
         }
     }
 }

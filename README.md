@@ -1,29 +1,37 @@
-# TETR.IO iOS Port (TetrPocket)
+# TETR.IO iOS Port
 
-A personal iOS wrapper for [TETR.IO](https://tetr.io) — the real game, running fullscreen
-in a native app with touch controls, since TETR.IO has no official mobile version.
+An iOS wrapper for [TETR.IO](https://tetr.io) — the real game, running fullscreen in a
+native app with fully customizable touch controls, native ad blocking, and hardware
+keyboard and mouse support. TETR.IO has no official mobile version; this fills that gap.
 
 > **Unofficial and unaffiliated.** Not affiliated with, authorized, or endorsed by
 > [osk](https://osk.sh), TETR.IO, or The Tetris Company. TETR.IO and all its content
 > belong to their respective owners.
 >
-> This repository contains **no game code or assets** — it is just a WebView shell that
-> loads `tetr.io` in the browser engine, so you play the live official game with your own
-> account, subject to TETR.IO's own terms of service. The touch overlay presses the game's
-> normal keys and confers no gameplay advantage. Builds here are **unsigned**: you sign
-> them yourself with your own Apple ID. Use at your own risk.
+> This repository contains **no game code, assets, or artwork** — it is a WebView shell
+> that loads `tetr.io`, so you play the live official game with your own account, subject
+> to TETR.IO's own terms of service. The app icon is original work made for this project.
+> The touch overlay presses the game's normal keys and confers no gameplay advantage.
+> Builds here are **unsigned**: you sign them yourself with your own Apple ID.
 
-## How it works
+## Features
 
-- A SwiftUI app hosting a fullscreen **WKWebView** pointed at `https://tetr.io`
-- **Desktop Safari user-agent** (TETR.IO blocks mobile browsers), persistent cookies so
-  you stay logged in, screen kept awake, scrolling and text selection disabled
-- A **native touch overlay** that dispatches TETR.IO's default keybinds as synthetic
-  key events into the page
-- **GitHub Actions** compiles an unsigned IPA on a macOS runner on every push to `main`
-  and pins it to the [`latest` release](../../releases/tag/latest)
+- **Fully customizable controls** — drag any button anywhere, resize it (40–160 pt), and
+  set its opacity. Layouts persist across launches and adapt to rotation and screen size,
+  because positions are stored as screen fractions rather than pixels.
+- **Native ad blocking** — a `WKContentRuleList` (the same engine Safari content blockers
+  use) drops ad requests in the networking layer, so they never reach the page. This is
+  far cheaper than a JavaScript loop scrubbing the DOM, and it removes the ad *load* —
+  the actual source of stutter — rather than just hiding the result. Toggleable.
+- **Hardware keyboard and mouse** — key events reach the page directly, and pointer
+  events are delivered as mouse input. The overlay auto-hides the first time a keyboard
+  connects, and the controller icon in the HUD brings it back.
+- **Tuned for performance** — 120 Hz unlocked on ProMotion displays, opaque compositing,
+  no tap delay or rubber-banding, desktop content mode, persistent login.
 
-## Touch controls
+## Controls
+
+Defaults match TETR.IO's own default binds:
 
 | Button | Action | Key sent |
 |--------|--------|----------|
@@ -33,54 +41,66 @@ in a native app with touch controls, since TETR.IO has no official mobile versio
 | ↺ / ↻ | Rotate CCW / CW | Z / ↑ |
 | 180 | Rotate 180° | A |
 | H | Hold | C |
-| ESC / R / ⟳ | Menu back / retry / reload page | Esc / R / — |
-| ✕ / 🎮 | Hide / show the overlay | — |
+| ESC / R | Menu back / retry | Esc / R |
 
-Keep TETR.IO's in-game keybinds at their **defaults** — the overlay maps to them.
-If you've customized binds, either reset them or edit the `GameKey` enum in
-[`TetrPocket/GameWebView.swift`](TetrPocket/GameWebView.swift).
-A Bluetooth keyboard works too: hide the overlay with ✕ and play normally.
+If you've customized your binds in TETR.IO, either reset them to defaults or edit the
+`GameKey` enum in [`TetrPocket/ControlModel.swift`](TetrPocket/ControlModel.swift).
 
-## Getting a build on your iPhone
+**To rearrange:** tap the slider icon in the top-left HUD, drag buttons where you want
+them, tap one to resize or fade it, then tap **Done**. There's a reset in the panel.
 
-1. Push any change to `main` (or run the workflow manually from the **Actions** tab)
-2. Wait ~5–8 minutes for the **Build IPA** workflow to finish
-3. Download `TetrPocket.ipa` from the [latest release](../../releases/tag/latest)
-4. Sideload it with [Sideloadly](https://sideloadly.io) (Windows/macOS) or
-   [AltStore](https://altstore.io): plug in the iPhone, feed it the IPA, sign in with
-   your Apple ID
-5. On the phone: **Settings → General → VPN & Device Management** → trust your
+## Install
+
+1. Download `Tetr.io-iOS-Port.ipa` from the [latest release](../../releases/tag/latest)
+2. Sideload with [Sideloadly](https://sideloadly.io) or [AltStore](https://altstore.io):
+   plug in the device, feed it the IPA, sign in with your Apple ID
+3. On the device: **Settings → General → VPN & Device Management** → trust your
    certificate. iOS 16+: also enable **Developer Mode** under Privacy & Security
 
-With a free Apple ID the signature lasts **7 days** — re-sideload to refresh
-(AltStore can automate this). A paid developer account extends it to a year.
+A free Apple ID signature lasts **7 days** — re-sideload to refresh (AltStore can
+automate it). A paid developer account extends it to a year.
 
-Have a Mac? You can skip the IPA entirely: open `TetrPocket.xcodeproj` in Xcode 16+,
-set your team under *Signing & Capabilities*, and hit Run with your phone connected.
+Have a Mac? Skip the IPA: open `TetrPocket.xcodeproj` in Xcode 16+, set your team under
+*Signing & Capabilities*, and Run with the device connected.
 
-## Updating
+## Building
 
-Edit → commit → push. The workflow rebuilds the IPA and replaces the one on the
-`latest` release automatically. Then re-sideload the new IPA.
+Every push to `main` triggers the **Build IPA** workflow, which compiles on a macOS
+runner, sanity-checks the bundle (architecture, Info.plist keys, compiled icon), and
+replaces the IPA on the `latest` release. No Mac needed to get a build.
+
+## Supporting the game
+
+Ad blocking here is a client-side choice, and osk has [said publicly](https://blog.osk.sh/post.php?p=5f9dfef7f36858.79227265)
+that TETR.IO won't complain about adblockers. If you play a lot, TETR.IO SUPPORTER
+removes ads officially and the money actually reaches the developer — this toggle
+does not.
 
 ## Troubleshooting
 
-- **Stutters or low FPS** — lower the graphics preset in TETR.IO's own settings; the
-  game is heavy WebGL and older devices struggle
-- **"Browser not supported" screen** — the desktop user-agent usually avoids this;
-  if it appears, look for a "proceed anyway" option or tap ⟳
-- **Buttons do nothing** — the page may still be loading, or your in-game keybinds
-  differ from the defaults (see above)
-- **Build fails in Actions** — open the failed run's log; the `xcodebuild` step output
-  says what broke
+- **Stutters or low FPS** — lower the graphics preset in TETR.IO's own settings; it's a
+  heavy WebGL game and older devices struggle regardless of what the wrapper does
+- **"Browser not supported"** — the desktop user-agent and content mode normally avoid
+  this; if it appears, look for a proceed option or tap reload in the HUD
+- **Buttons do nothing** — the page may still be loading, or your in-game binds differ
+  from the defaults
+- **Ad-block toggle seems inert** — content rule lists attach at web-view creation, so
+  it takes effect on the next launch
+- **Build fails in Actions** — open the failed run; the sanity-check step names what's
+  missing
 
 ## Project layout
 
 ```
-TetrPocket/               SwiftUI app source
-  GameWebView.swift       WKWebView setup + key-event bridge (edit keybinds here)
-  TouchControls.swift     The touch overlay
-  ContentView.swift       Composition root
-TetrPocket.xcodeproj/     Xcode project (Xcode 16+, iOS 17+)
-.github/workflows/        CI: unsigned IPA build + release upload
+Info.plist                  Explicit bundle config (120 Hz, orientations, display name)
+TetrPocket/
+  TetrPocketApp.swift       App entry
+  ContentView.swift         Composition + hardware-keyboard detection
+  GameWebView.swift         WKWebView setup, key-event bridge, page bootstrap
+  ControlModel.swift        Keys, button model, persistence, default layouts
+  TouchControls.swift       Draggable overlay + HUD
+  EditPanel.swift           Size / opacity / toggles / reset
+  AdBlock.swift             Content-rule-list rules
+TetrPocket.xcodeproj/       Xcode project (Xcode 16+, iOS 17+)
+.github/workflows/          CI: unsigned IPA build, verification, release upload
 ```

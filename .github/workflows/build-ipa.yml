@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  IPA_NAME: Tetr.io-iOS-Port.ipa
+
 jobs:
   build:
     name: Build unsigned IPA
@@ -35,21 +38,40 @@ jobs:
         run: |
           mkdir -p Payload
           cp -R build/Release-iphoneos/TetrPocket.app Payload/
-          zip -r TetrPocket.ipa Payload
-          ls -la TetrPocket.ipa
+          zip -qry "$IPA_NAME" Payload
+          ls -la "$IPA_NAME"
+
+      - name: Sanity-check the bundle
+        run: |
+          APP=build/Release-iphoneos/TetrPocket.app
+          echo "--- bundle contents ---"
+          ls -la "$APP"
+          echo "--- architectures ---"
+          lipo -info "$APP/TetrPocket"
+          echo "--- key Info.plist values ---"
+          for k in CFBundleIdentifier CFBundleDisplayName CADisableMinimumFrameDuration \
+                   UIApplicationSupportsIndirectInputEvents MinimumOSVersion; do
+            printf '%s = ' "$k"
+            /usr/libexec/PlistBuddy -c "Print :$k" "$APP/Info.plist" 2>/dev/null || echo "(missing)"
+          done
+          # Fail the build if the icon never made it into the bundle.
+          test -f "$APP/Assets.car" || { echo "ERROR: Assets.car missing — app icon did not compile"; exit 1; }
+          echo "Assets.car present (app icon compiled)"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TetrPocket-ipa
-          path: TetrPocket.ipa
+          name: Tetr-io-iOS-Port-ipa
+          path: ${{ env.IPA_NAME }}
 
-      - name: Update "latest" release with IPA
+      - name: Update "latest" release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: TetrPocket (latest build)
+          name: TETR.IO Port (latest build)
           body: |
             Unsigned IPA built from commit ${{ github.sha }}.
+
             Sideload with Sideloadly or AltStore using your own Apple ID.
-          files: TetrPocket.ipa
+            See the README for install steps.
+          files: ${{ env.IPA_NAME }}
