@@ -4,8 +4,11 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<!-- osk's branding terms allow third-party projects to reference TETR.IO but
+	     require that the name not imply affiliation: "Skin Editor for TETR.IO" is
+	     fine, "TETR.IO Skin Editor" is not. Hence the "for TETR.IO" form. -->
 	<key>CFBundleDisplayName</key>
-	<string>TETR.IO Port</string>
+	<string>Port for TETR.IO</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

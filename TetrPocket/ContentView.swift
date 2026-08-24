@@ -17,6 +17,19 @@ struct ContentView: View {
             GameWebView(proxy: proxy, adBlockEnabled: store.adBlockEnabled)
                 .ignoresSafeArea()
 
+            // Watches the screen shape so each device/orientation gets its own
+            // control arrangement. Kept separate from the overlay so it keeps
+            // working while the overlay is hidden.
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear { store.activate(.current(size: geo.size)) }
+                    .onChange(of: geo.size) { _, newSize in
+                        store.activate(.current(size: newSize))
+                    }
+            }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+
             if !store.overlayHidden {
                 ControlOverlay(store: store, proxy: proxy)
                     .ignoresSafeArea()

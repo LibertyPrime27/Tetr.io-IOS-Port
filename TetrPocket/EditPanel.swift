@@ -9,6 +9,13 @@ struct EditPanel: View {
             Spacer()
 
             VStack(alignment: .leading, spacing: 10) {
+                // Layouts are stored per device class and orientation, so name the
+                // one being edited.
+                Text("EDITING \(store.slot.label.uppercased())")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.4))
+                    .tracking(1.0)
+
                 if let button = store.selectedButton {
                     Text(button.key.title.uppercased())
                         .font(.system(size: 11, weight: .heavy, design: .rounded))
@@ -16,7 +23,7 @@ struct EditPanel: View {
                         .tracking(1.2)
 
                     SliderRow(icon: "arrow.up.left.and.arrow.down.right",
-                              value: button.size, range: 40...160, unit: "pt") { newValue in
+                              value: button.size, range: 40...170, unit: "pt") { newValue in
                         store.setSize(button.id, newValue)
                     } onCommit: {
                         store.save()

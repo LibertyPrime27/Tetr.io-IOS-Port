@@ -3,6 +3,7 @@ name: Build IPA
 on:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -10,10 +11,11 @@ permissions:
 
 env:
   IPA_NAME: Tetr.io-iOS-Port.ipa
+  APP_PATH: build/Release-iphoneos/TetrPocket.app
 
 jobs:
   build:
-    name: Build unsigned IPA
+    name: Build IPA
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -21,7 +23,7 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
-      - name: Build (unsigned)
+      - name: Build
         run: |
           xcodebuild \
             -project TetrPocket.xcodeproj \
@@ -34,29 +36,61 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             ONLY_ACTIVE_ARCH=NO
 
+      # An entirely unsigned Mach-O has no code-signature slot at all, which is
+      # what re-signers (zsign, used by LiveContainer and friends) need to fill.
+      # Ad-hoc signing here produces a real, well-formed signature and
+      # _CodeSignature/CodeResources for them to replace.
+      - name: Ad-hoc sign
+        run: |
+          set -euo pipefail
+          # Stray xattrs and .DS_Store files break CodeResources validation.
+          xattr -cr "$APP_PATH"
+          find "$APP_PATH" -name '.DS_Store' -delete || true
+
+          codesign --force --sign - \
+            --entitlements Signing/adhoc.entitlements \
+            --generate-entitlement-der \
+            --timestamp=none \
+            "$APP_PATH"
+
+          echo "--- signature ---"
+          codesign -dvv "$APP_PATH" 2>&1 | sed 's/^/  /'
+          echo "--- verify ---"
+          codesign --verify --verbose=2 "$APP_PATH"
+          echo "--- entitlements ---"
+          codesign -d --entitlements :- "$APP_PATH" 2>/dev/null | sed 's/^/  /' || true
+
+      - name: Verify bundle
+        run: |
+          set -euo pipefail
+          echo "--- contents ---"
+          ls -la "$APP_PATH"
+          echo "--- architectures ---"
+          lipo -info "$APP_PATH/TetrPocket"
+          echo "--- key Info.plist values ---"
+          for k in CFBundleIdentifier CFBundleDisplayName CFBundleShortVersionString \
+                   CADisableMinimumFrameDuration UIApplicationSupportsIndirectInputEvents \
+                   MinimumOSVersion; do
+            printf '  %s = ' "$k"
+            /usr/libexec/PlistBuddy -c "Print :$k" "$APP_PATH/Info.plist" 2>/dev/null || echo "(missing)"
+          done
+
+          # Fail loudly rather than shipping a bundle missing its icon or signature.
+          test -f "$APP_PATH/Assets.car" \
+            || { echo "ERROR: Assets.car missing — app icon did not compile"; exit 1; }
+          test -d "$APP_PATH/_CodeSignature" \
+            || { echo "ERROR: _CodeSignature missing — ad-hoc signing did not apply"; exit 1; }
+          echo "OK: icon compiled and bundle is signed"
+
       - name: Package IPA
         run: |
+          set -euo pipefail
           mkdir -p Payload
-          cp -R build/Release-iphoneos/TetrPocket.app Payload/
-          zip -qry "$IPA_NAME" Payload
+          cp -R "$APP_PATH" Payload/
+          # -X drops extra file attributes that some signers trip over.
+          zip -qryX "$IPA_NAME" Payload
           ls -la "$IPA_NAME"
-
-      - name: Sanity-check the bundle
-        run: |
-          APP=build/Release-iphoneos/TetrPocket.app
-          echo "--- bundle contents ---"
-          ls -la "$APP"
-          echo "--- architectures ---"
-          lipo -info "$APP/TetrPocket"
-          echo "--- key Info.plist values ---"
-          for k in CFBundleIdentifier CFBundleDisplayName CADisableMinimumFrameDuration \
-                   UIApplicationSupportsIndirectInputEvents MinimumOSVersion; do
-            printf '%s = ' "$k"
-            /usr/libexec/PlistBuddy -c "Print :$k" "$APP/Info.plist" 2>/dev/null || echo "(missing)"
-          done
-          # Fail the build if the icon never made it into the bundle.
-          test -f "$APP/Assets.car" || { echo "ERROR: Assets.car missing — app icon did not compile"; exit 1; }
-          echo "Assets.car present (app icon compiled)"
+          unzip -l "$IPA_NAME"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -64,14 +98,22 @@ jobs:
           name: Tetr-io-iOS-Port-ipa
           path: ${{ env.IPA_NAME }}
 
-      - name: Update "latest" release
+      # Releases are cut by pushing a tag (e.g. v2.0), so each version gets its
+      # own release. Ordinary pushes to main only produce a build artifact.
+      - name: Create release for this tag
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: TETR.IO Port (latest build)
+          tag_name: ${{ github.ref_name }}
+          name: TETR.IO Port ${{ github.ref_name }}
+          draft: false
+          prerelease: false
           body: |
-            Unsigned IPA built from commit ${{ github.sha }}.
+            Unsigned-for-distribution build of the TETR.IO iOS port, ad-hoc signed
+            so sideloaders and LiveContainer can re-sign it cleanly.
 
-            Sideload with Sideloadly or AltStore using your own Apple ID.
-            See the README for install steps.
+            **Install:** sideload `Tetr.io-iOS-Port.ipa` with Sideloadly or AltStore
+            using your own Apple ID, or import it into LiveContainer. See the README.
+
+            Built from commit ${{ github.sha }}.
           files: ${{ env.IPA_NAME }}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Applied when CI ad-hoc signs the bundle. Sideloaders (Sideloadly,
+	     AltStore) and LiveContainer replace this signature with one from your own
+	     certificate, but shipping a real, valid signature to begin with gives
+	     those re-signers something well-formed to work from — an entirely
+	     unsigned Mach-O has no LC_CODE_SIGNATURE slot for them to fill. -->
+	<key>get-task-allow</key>
+	<true/>
+</dict>
+</plist>

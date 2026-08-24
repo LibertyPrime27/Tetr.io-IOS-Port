@@ -96,10 +96,42 @@ enum GameKey: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Layout slots
+
+/// Positions are stored as screen fractions, which survives resolution changes
+/// but *not* aspect-ratio changes: three buttons spaced 0.09 apart sit 75pt
+/// apart on a landscape phone and 35pt apart in portrait — overlapping. So each
+/// device class and orientation keeps its own arrangement.
+enum LayoutSlot: String, CaseIterable {
+    case phonePortrait, phoneLandscape, padPortrait, padLandscape
+
+    static func current(size: CGSize) -> LayoutSlot {
+        let isPad = UIDevice.current.userInterfaceIdiom == .pad
+        let isLandscape = size.width >= size.height
+        switch (isPad, isLandscape) {
+        case (true, true):   return .padLandscape
+        case (true, false):  return .padPortrait
+        case (false, true):  return .phoneLandscape
+        case (false, false): return .phonePortrait
+        }
+    }
+
+    var isPad: Bool { self == .padPortrait || self == .padLandscape }
+
+    /// Shown in the edit panel so it's obvious which arrangement you're changing.
+    var label: String {
+        switch self {
+        case .phonePortrait:  return "iPhone \u{00B7} Portrait"
+        case .phoneLandscape: return "iPhone \u{00B7} Landscape"
+        case .padPortrait:    return "iPad \u{00B7} Portrait"
+        case .padLandscape:   return "iPad \u{00B7} Landscape"
+        }
+    }
+}
+
 // MARK: - Layout model
 
-/// One on-screen button. Position is stored as a fraction of the screen so a
-/// layout survives rotation and moving between iPhone and iPad.
+/// One on-screen button, positioned as a fraction of the screen.
 struct ControlButton: Identifiable, Codable, Equatable {
     var id: UUID
     var key: GameKey
@@ -126,32 +158,57 @@ final class LayoutStore: ObservableObject {
     @Published var selected: UUID?
     @Published var overlayHidden: Bool = false
     @Published var keyboardConnected: Bool = false
+    @Published private(set) var slot: LayoutSlot
     @Published private(set) var adBlockEnabled: Bool
     @Published private(set) var hapticsEnabled: Bool
 
-    private static let layoutKey = "tetrport.layout.v2"
+    /// Every slot's arrangement, keyed by `LayoutSlot.rawValue`.
+    private var stored: [String: [ControlButton]]
+
+    private static let layoutsKey = "tetrport.layouts.v3"
     private static let adBlockKey = "tetrport.adblock.enabled"
     private static let hapticsKey = "tetrport.haptics.enabled"
 
     init() {
         let defaults = UserDefaults.standard
         adBlockEnabled = defaults.object(forKey: Self.adBlockKey) as? Bool ?? true
-        hapticsEnabled = defaults.object(forKey: Self.hapticsKey) as? Bool ?? true
 
-        if let data = defaults.data(forKey: Self.layoutKey),
-           let saved = try? JSONDecoder().decode([ControlButton].self, from: data),
-           !saved.isEmpty {
-            buttons = saved
+        // iPads have no haptic engine, so the feedback is dead weight there.
+        let isPad = UIDevice.current.userInterfaceIdiom == .pad
+        hapticsEnabled = defaults.object(forKey: Self.hapticsKey) as? Bool ?? !isPad
+
+        let decoded: [String: [ControlButton]]
+        if let data = defaults.data(forKey: Self.layoutsKey),
+           let map = try? JSONDecoder().decode([String: [ControlButton]].self, from: data) {
+            decoded = map
         } else {
-            buttons = Self.defaultLayout()
+            decoded = [:]
         }
+        stored = decoded
+
+        // Start on the slot matching the current screen; corrected on first layout pass.
+        let startSlot: LayoutSlot = isPad ? .padLandscape : .phoneLandscape
+        slot = startSlot
+        buttons = decoded[startSlot.rawValue] ?? Self.defaultLayout(for: startSlot)
+    }
+
+    // MARK: Slots
+
+    /// Switch to the arrangement for this screen shape, stashing the current one.
+    func activate(_ newSlot: LayoutSlot) {
+        guard newSlot != slot else { return }
+        stored[slot.rawValue] = buttons
+        slot = newSlot
+        buttons = stored[newSlot.rawValue] ?? Self.defaultLayout(for: newSlot)
+        selected = nil
     }
 
     // MARK: Persistence
 
     func save() {
-        if let data = try? JSONEncoder().encode(buttons) {
-            UserDefaults.standard.set(data, forKey: Self.layoutKey)
+        stored[slot.rawValue] = buttons
+        if let data = try? JSONEncoder().encode(stored) {
+            UserDefaults.standard.set(data, forKey: Self.layoutsKey)
         }
     }
 
@@ -165,8 +222,9 @@ final class LayoutStore: ObservableObject {
         UserDefaults.standard.set(enabled, forKey: Self.hapticsKey)
     }
 
+    /// Reset only the arrangement currently on screen.
     func resetLayout() {
-        buttons = Self.defaultLayout()
+        buttons = Self.defaultLayout(for: slot)
         selected = nil
         save()
     }
@@ -185,7 +243,7 @@ final class LayoutStore: ObservableObject {
 
     func setSize(_ id: UUID, _ size: Double) {
         guard let i = index(of: id) else { return }
-        buttons[i].size = min(max(size, 40), 160)
+        buttons[i].size = min(max(size, 40), 170)
     }
 
     func setOpacity(_ id: UUID, _ opacity: Double) {
@@ -200,34 +258,45 @@ final class LayoutStore: ObservableObject {
 
     // MARK: Defaults
 
-    static func defaultLayout() -> [ControlButton] {
-        let pad = UIDevice.current.userInterfaceIdiom == .pad
-        let big: Double = pad ? 96 : 68        // hard drop / rotate
-        let std: Double = pad ? 84 : 60        // movement
-        let small: Double = pad ? 54 : 42      // utility
-        let dx: Double = pad ? 0.072 : 0.088   // horizontal spacing
-        let row1: Double = pad ? 0.86 : 0.84   // bottom row
-        let row2: Double = pad ? 0.70 : 0.63   // row above
+    /// Tuned per screen shape: spacing is chosen so buttons clear each other on
+    /// the narrow axis, and sizes follow the touch target the device deserves.
+    static func defaultLayout(for slot: LayoutSlot) -> [ControlButton] {
+        let big: Double, std: Double, small: Double
+        let dx: Double, edge: Double, row1: Double, row2: Double
 
-        let leftEdge: Double = pad ? 0.075 : 0.085
-        let rightEdge: Double = 1.0 - leftEdge
+        switch slot {
+        case .padLandscape:
+            big = 96; std = 86; small = 54
+            dx = 0.064; edge = 0.072; row1 = 0.855; row2 = 0.700
+        case .padPortrait:
+            big = 96; std = 86; small = 54
+            dx = 0.086; edge = 0.095; row1 = 0.880; row2 = 0.775
+        case .phoneLandscape:
+            big = 66; std = 58; small = 40
+            dx = 0.076; edge = 0.072; row1 = 0.800; row2 = 0.540
+        case .phonePortrait:
+            big = 62; std = 56; small = 40
+            dx = 0.170; edge = 0.130; row1 = 0.895; row2 = 0.800
+        }
+
+        let rightEdge = 1.0 - edge
 
         return [
             // Movement, left thumb
-            ControlButton(key: .left,      x: leftEdge,          y: row1, size: std),
-            ControlButton(key: .softDrop,  x: leftEdge + dx,     y: row1, size: std),
-            ControlButton(key: .right,     x: leftEdge + dx * 2, y: row1, size: std),
-            ControlButton(key: .hardDrop,  x: leftEdge + dx,     y: row2, size: big),
+            ControlButton(key: .left,      x: edge,             y: row1, size: std),
+            ControlButton(key: .softDrop,  x: edge + dx,        y: row1, size: std),
+            ControlButton(key: .right,     x: edge + dx * 2,    y: row1, size: std),
+            ControlButton(key: .hardDrop,  x: edge + dx,        y: row2, size: big),
 
             // Rotation + hold, right thumb
-            ControlButton(key: .rotateCCW, x: rightEdge - dx,    y: row1, size: big),
-            ControlButton(key: .rotateCW,  x: rightEdge,         y: row1, size: big),
-            ControlButton(key: .hold,      x: rightEdge - dx,    y: row2, size: std),
-            ControlButton(key: .rotate180, x: rightEdge,         y: row2, size: std),
+            ControlButton(key: .rotateCCW, x: rightEdge - dx,   y: row1, size: big),
+            ControlButton(key: .rotateCW,  x: rightEdge,        y: row1, size: big),
+            ControlButton(key: .hold,      x: rightEdge - dx,   y: row2, size: std),
+            ControlButton(key: .rotate180, x: rightEdge,        y: row2, size: std),
 
             // Utility, top right
-            ControlButton(key: .escape,    x: 0.88,              y: 0.07, size: small, opacity: 0.55),
-            ControlButton(key: .retry,     x: 0.94,              y: 0.07, size: small, opacity: 0.55),
+            ControlButton(key: .escape,    x: 0.88,             y: 0.06, size: small, opacity: 0.5),
+            ControlButton(key: .retry,     x: 0.945,            y: 0.06, size: small, opacity: 0.5),
         ]
     }
 }
